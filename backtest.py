@@ -8,7 +8,7 @@ import numpy as np
 DATA_DIR = "data"
 RESULTS_DIR = "backtest_results"
 BENCHMARK = "NIFTYBEES.NS"
-INITIAL_CAPITAL = 100000
+INITIAL_CAPITAL = 500000
 TOP_N = 5
 STOP_LOSS = 0.15
 

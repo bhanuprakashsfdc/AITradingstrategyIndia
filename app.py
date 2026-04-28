@@ -79,6 +79,26 @@ def build_dashboard():
 
     return df, bench_return * 100
 
+@st.cache_data(ttl=300)
+def load_summary():
+    try:
+        df = pd.read_csv('backtest_results/summary.csv')
+        return df.iloc[0].to_dict()
+    except FileNotFoundError:
+        return None
+
+@st.cache_data(ttl=300)
+def load_trades():
+    try:
+        df = pd.read_csv('backtest_results/trades.csv')
+        # Convert Return to percentage and format
+        df['Return %'] = (df['Return'] * 100).round(2)
+        # Drop raw Return column to avoid confusion
+        df = df.drop(columns=['Return'])
+        return df
+    except FileNotFoundError:
+        return pd.DataFrame()
+
 # -----------------------------
 # UI
 # -----------------------------
@@ -90,45 +110,72 @@ st.caption("Strategy: Current Price vs Previous Month-End | Ranked by Relative S
 if st.button("🔄 Refresh Data"):
     st.cache_data.clear()
 
-# Load data
-df, bench_ret = build_dashboard()
+# Create tabs
+tab1, tab2 = st.tabs(["📈 Dashboard", "📑 Trades"])
 
-# -----------------------------
-# METRICS
-# -----------------------------
-col1, col2, col3 = st.columns(3)
+with tab1:
+    # Load data
+    df, bench_ret = build_dashboard()
 
-col1.metric("Benchmark Return (NIFTYBEES)", f"{bench_ret:.2f}%")
-col2.metric("Top Stock", df.iloc[0]["Symbol"])
-col3.metric("Top RS", f"{df.iloc[0]['RS %']:.2f}%")
+    # METRICS
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Benchmark Return (NIFTYBEES)", f"{bench_ret:.2f}%")
+    col2.metric("Top Stock", df.iloc[0]["Symbol"])
+    col3.metric("Top RS", f"{df.iloc[0]['RS %']:.2f}%")
 
-# -----------------------------
-# TOP 5
-# -----------------------------
-st.subheader("🔥 Top 5 Momentum Stocks")
-st.dataframe(df.head(5), width='stretch')
+    # TOP 5
+    st.subheader("🔥 Top 5 Momentum Stocks")
+    st.dataframe(df.head(5), width='stretch')
 
-# -----------------------------
-# FULL TABLE
-# -----------------------------
-st.subheader("📋 Full Ranking")
-st.dataframe(df.style.format({
-    "Prev Price": "{:.2f}",
-    "Current Price": "{:.2f}",
-    "Return %": "{:.2f}",
-    "RS %": "{:.2f}"
-    }).background_gradient(subset=["RS %"], cmap="RdYlGn"), width='stretch')
+    # FULL TABLE
+    st.subheader("📋 Full Ranking")
+    st.dataframe(df.style.format({
+        "Prev Price": "{:.2f}",
+        "Current Price": "{:.2f}",
+        "Return %": "{:.2f}",
+        "RS %": "{:.2f}"
+        }).background_gradient(subset=["RS %"], cmap="RdYlGn"), width='stretch')
 
-# -----------------------------
-# DOWNLOAD
-# -----------------------------
-st.download_button(
-    "📥 Download CSV",
-    df.to_csv(index=False),
-    file_name="nifty50_momentum_dashboard.csv"
-)
+    # DOWNLOAD
+    st.download_button(
+        "📥 Download CSV",
+        df.to_csv(index=False),
+        file_name="nifty50_momentum_dashboard.csv"
+    )
 
-# -----------------------------
-# FOOTER
-# -----------------------------
-st.caption("⚠️ Uses same-time close logic (lookahead bias). For research only.")
+    st.caption("⚠️ Uses same-time close logic (lookahead bias). For research only.")
+
+with tab2:
+    trades_df = load_trades()
+    summary_data = load_summary()
+    
+    if summary_data is None:
+        st.warning("No summary data found. Please run the backtest first.")
+    else:
+        # Display summary metrics from portfolio performance
+        st.subheader("📊 Trading Summary")
+        col1, col2, col3, col4, col5 = st.columns(5)
+        col1.metric("Total Invested", f"₹{summary_data['Initial Capital']:,.2f}")
+        col2.metric("Current Worth", f"₹{summary_data['Final Capital']:,.2f}")
+        col3.metric("Total Profit", f"₹{summary_data['Total PnL']:,.2f}")
+        col4.metric("Profit %", f"{summary_data['Total Return %']:.2f}%")
+        col5.metric("CAGR", f"{summary_data['CAGR']:.2f}%")
+    
+    if trades_df.empty:
+        st.warning("No trades data found.")
+    else:
+        st.subheader("📑 All Trades")
+        styled_trades = trades_df.style.format({
+            "Entry Price": "{:.2f}",
+            "Exit Price": "{:.2f}",
+            "Allocation": "{:,.2f}",
+            "P&L": "{:,.2f}",
+            "Return %": "{:.2f}%"
+        }).background_gradient(subset=["Return %"], cmap="RdYlGn")
+        st.dataframe(styled_trades, width='stretch')
+
+        st.download_button(
+            "📥 Download Trades CSV",
+            trades_df.to_csv(index=False),
+            file_name="trades.csv"
+        )
